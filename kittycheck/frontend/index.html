@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KittyCheck - Gatitos con Propósito</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+
+  <header class="bg-white shadow p-6 text-center">
+    <h1 class="text-4xl font-extrabold text-blue-600">KittyCheck</h1>
+    <p class="text-lg text-blue-500">Gatitos con Propósito</p>
+  </header>
+
+  <main class="max-w-5xl mx-auto p-6 space-y-8">
+
+    <section class="bg-white p-6 rounded-2xl shadow">
+      <h2 class="text-2xl font-bold text-gray-700 mb-4">Control y Seguimiento</h2>
+      <form id="form-control" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <input class="p-2 border rounded" type="text" name="cat_name" placeholder="Nombre del gato" required>
+        <input class="p-2 border rounded" type="number" name="age_months" placeholder="Edad (meses)" required>
+        <input class="p-2 border rounded" type="number" name="weight_g" placeholder="Peso (g)" required>
+        <select class="p-2 border rounded" name="sex">
+          <option value="M">Macho</option>
+          <option value="H">Hembra</option>
+        </select>
+        <select class="p-2 border rounded" name="stage">
+          <option value="Gatito">Gatito</option>
+          <option value="Adulto">Adulto</option>
+          <option value="Gestante">Gestante</option>
+          <option value="Lactante">Lactante</option>
+        </select>
+        <input class="p-2 border rounded" type="text" name="dewormer" placeholder="Desparasitante" required>
+        <input class="p-2 border rounded" type="number" step="0.01" name="base_dose_mg_per_kg" placeholder="Dosis base (mg/kg) si es nuevo">
+        <input class="p-2 border rounded" type="date" name="date" required>
+        <input class="p-2 border rounded sm:col-span-2" type="text" name="notes" placeholder="Notas (opcional)">
+        <button class="sm:col-span-2 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-xl">Guardar Registro</button>
+      </form>
+    </section>
+
+    <section class="bg-white p-6 rounded-2xl shadow">
+      <h2 class="text-2xl font-bold text-gray-700 mb-4">Historial de Controles</h2>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm text-left border">
+          <thead class="bg-gray-100">
+            <tr>
+              <th class="p-2 border">Fecha</th>
+              <th class="p-2 border">Nombre</th>
+              <th class="p-2 border">Peso (g)</th>
+              <th class="p-2 border">Desparasitante (ID)</th>
+              <th class="p-2 border">Dosis total (mg)</th>
+              <th class="p-2 border">Próximo Control</th>
+              <th class="p-2 border">Notas</th>
+            </tr>
+          </thead>
+          <tbody id="tabla-controles"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const API_BASE = '';
+
+    async function cargarHistorial() {
+      const catsRes = await fetch(`${API_BASE}/api/cats`);
+      const cats = await catsRes.json();
+      const catMap = Object.fromEntries(cats.map(ct => [ct.id, ct]));
+
+      const res2 = await fetch(`${API_BASE}/api/controls`);
+      const controls = await res2.json();
+
+      const tbody = document.getElementById("tabla-controles");
+      tbody.innerHTML = "";
+
+      controls.forEach(item => {
+        const tr = document.createElement("tr");
+        const cat = catMap[item.cat_id] || {};
+        const catName = cat.name || "(gato)";
+        const weight_g = item.weight_g_at_control;
+
+        tr.innerHTML = `
+          <td class="p-2 border">${item.date}</td>
+          <td class="p-2 border">${catName}</td>
+          <td class="p-2 border">${weight_g}</td>
+          <td class="p-2 border">${item.dewormer_id}</td>
+          <td class="p-2 border">${item.total_dose_mg}</td>
+          <td class="p-2 border proximo-control">${item.next_control}</td>
+          <td class="p-2 border">${item.notes || ""}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      marcarFechas();
+    }
+
+    function marcarFechas() {
+      document.querySelectorAll(".proximo-control").forEach(cell => {
+        const fechaTexto = cell.textContent.trim();
+        const fechaControl = new Date(fechaTexto);
+        const hoy = new Date();
+        const diffDias = Math.ceil((fechaControl - hoy) / (1000 * 60 * 60 * 24));
+        if (diffDias < 0) {
+          cell.innerHTML = `<span class="text-red-600 font-bold">¡Vencido!</span>`;
+        } else if (diffDias <= 7) {
+          cell.innerHTML = `<span class="text-yellow-600 font-semibold">Próximo (${fechaTexto})</span>`;
+        } else {
+          cell.innerHTML = `<span class="text-green-600">${fechaTexto}</span>`;
+        }
+      });
+    }
+
+    document.getElementById("form-control").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const body = Object.fromEntries(formData.entries());
+      if (!body.base_dose_mg_per_kg) delete body.base_dose_mg_per_kg;
+      if (!body.notes) delete body.notes;
+
+      body.age_months = parseInt(body.age_months);
+      body.weight_g = parseInt(body.weight_g);
+
+      const res = await fetch(`${API_BASE}/api/controls`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(()=>({detail:"Error"}));
+        alert("Error: " + (err.detail || res.statusText));
+        return;
+      }
+      e.target.reset();
+      cargarHistorial();
+    });
+
+    cargarHistorial();
+  </script>
+</body>
+</html>

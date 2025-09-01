@@ -3,7 +3,10 @@ services:
     name: kittycheck-api
     env: python
     plan: free
-    buildCommand: "pip install -r requirements.txt"
+    buildCommand: |
+      apt-get update && apt-get install -y build-essential python3-dev ninja-build
+      pip install --upgrade pip setuptools wheel
+      pip install -r requirements.txt
     startCommand: "uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT"
     envVars:
       - key: DATABASE_URL
